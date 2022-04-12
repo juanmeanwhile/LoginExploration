@@ -11,15 +11,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 
 class LoginViewModel(
@@ -27,12 +21,12 @@ class LoginViewModel(
     private val loginRepo: LoginRepository
 ) : ViewModel() {
 
-    private val currentFilledData: BaseStrategy.FilledData
+    private val currentFilledData: FilledData
         get() = savedInstanceData ?: strategy.getInitialFilledData()
 
     // TODO add saved state here
     // this represent the saved instance
-    private var savedInstanceData: BaseStrategy.FilledData? = null
+    private var savedInstanceData: FilledData? = null
 
     /**
      * Holds the current status of a login action
@@ -42,7 +36,7 @@ class LoginViewModel(
     /**
      * Holds the data filled by the user, which can be used by the strategy to decide what is the next step.
      */
-    private val _filledData = MutableSharedFlow<BaseStrategy.FilledData>(
+    private val _filledData = MutableSharedFlow<FilledData>(
         replay = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
@@ -52,8 +46,6 @@ class LoginViewModel(
         Log.d("LoginViewModel", "combine status: ${actionStatus::class.simpleName} - ${step.id.name}")
         actionStatus.map { step }
     }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(), replay = 1)
-
-    // fun getStepFlow(clazz: Class<out Step>) = uiState.filter { it.data is clazz }
 
     init {
         _filledData.tryEmit(strategy.getInitialFilledData())
@@ -72,9 +64,9 @@ class LoginViewModel(
     }
 
     fun onOptionSelected(option: String) {
-        //TODO use option
+        //TODO we assume option was Email just for simplicity
         viewModelScope.launch {
-            val updatedData = currentFilledData.copy(flowType = BaseStrategy.FlowType.LOGIN)
+            val updatedData = currentFilledData.copy(flowType = FlowType.EMAIL_PASS)
             _filledData.emit(updatedData)
         }
     }

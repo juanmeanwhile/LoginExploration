@@ -75,11 +75,11 @@ private fun LoginScreen(viewModel: LoginViewModel, navController: NavHostControl
             Text("Empty")
         }
         composable(Step.NavId.EMAIL.name) {
-            val enterEmailFlow = viewModel.uiState.filter { it.data is Step.EnterEmailStep } as Flow<Outcome<Step.EnterEmailStep>> //TODO move to VM method
+            val enterEmailFlow = viewModel.uiState.filterStep<Step.EnterEmailStep>()
             EnterEmailScreen(enterEmailFlow, onEmailEntered = viewModel::onEmailEntered)
         }
         composable(Step.NavId.PASSWORD.name) {
-            val enterPasswordFlow = viewModel.uiState.filter { it.data is Step.EnterPassword } as Flow<Outcome<Step.EnterPassword>> //TODO move to VM method
+            val enterPasswordFlow = viewModel.uiState.filterStep<Step.EnterPassword>()
             EnterPasswordScreen(dataFlow = enterPasswordFlow, onPasswordEntered = viewModel::onPasswordEntered)
         }
         composable(
@@ -108,6 +108,15 @@ private fun LoginScreen(viewModel: LoginViewModel, navController: NavHostControl
     }
 
     LoginStep(stepFlow = stepFlow, navController = navController)
+}
+
+/**
+ * Sugar for this filter that is repeated for every screen.
+ * We decided to crash if the cast fails, since it's more likely a problem that will be detected in development and should not happen in prod.
+ * Still, having this kind of "trust" behavior is one of the drawbacks of the approach
+ */
+private inline fun <reified S>Flow<Outcome<Step>>.filterStep(): Flow<Outcome<S>> {
+    return filter { it.data is S } as Flow<Outcome<S>>
 }
 
 @Composable

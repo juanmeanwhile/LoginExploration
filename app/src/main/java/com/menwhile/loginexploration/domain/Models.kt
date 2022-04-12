@@ -1,5 +1,23 @@
 package com.menwhile.loginexploration.domain
 
+/**
+ * Data which has been already gathered from the user.
+ * This login flow is considered a process of gathering user information, so this represent how far we are in the login process.
+ */
+data class FilledData(
+    val flowType: FlowType?,
+    val userEmail: String?,
+    val userPassword: String?,
+    val termsConfirmed: Boolean = false,
+    val userId: String?
+)
+
+/**
+ * Kind of flow selected by the user
+ */
+enum class FlowType {
+    SOCIAL, EMAIL_PASS
+}
 
 // Should not be data class, because we want to be able to emit the same values and still produce recomposition
 // TODO possible this one can be a data class, because we are using the step only for the navigation

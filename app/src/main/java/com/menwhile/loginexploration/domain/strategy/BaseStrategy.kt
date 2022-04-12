@@ -1,11 +1,11 @@
 package com.menwhile.loginexploration.domain.strategy
 
 import android.util.Log
+import com.menwhile.loginexploration.domain.FilledData
 import com.menwhile.loginexploration.domain.Step
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * Responsible from deciding the next step based on the current data passed.
@@ -68,17 +68,5 @@ class BaseStrategy {
         return Step.End.takeIf {
             data.userId != null
         }
-    }
-
-    data class FilledData(
-        val flowType: FlowType?,
-        val userEmail: String?,
-        val userPassword: String?,
-        val termsConfirmed: Boolean = false,
-        val userId: String?
-    )
-
-    enum class FlowType {
-        SOCIAL, LOGIN, REGISTRATION
     }
 }
