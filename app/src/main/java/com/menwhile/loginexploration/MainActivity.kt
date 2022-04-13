@@ -1,7 +1,6 @@
 package com.menwhile.loginexploration
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -17,21 +16,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.AbstractSavedStateViewModelFactory
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.flowWithLifecycle
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import com.menwhile.loginexploration.data.LoginRepository
 import com.menwhile.loginexploration.domain.LoginViewModel
 import com.menwhile.loginexploration.domain.Outcome
 import com.menwhile.loginexploration.domain.Step
-import com.menwhile.loginexploration.domain.strategy.BaseStrategy
 import com.menwhile.loginexploration.ui.screen.EnterEmailScreen
 import com.menwhile.loginexploration.ui.screen.EnterPasswordScreen
 import com.menwhile.loginexploration.ui.screen.OptionsOverviewScreen
@@ -42,7 +39,7 @@ import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: LoginViewModel by viewModels { MainViewModelFactory() }
+    private val viewModel: LoginViewModel by viewModels { MainViewModelFactory(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,19 +57,26 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun LoginScreen(viewModel: LoginViewModel, navController: NavHostController) {
-    Log.d("LoginScreen", "recomposed")
 
-    // TODO make end pop up the rest of the steps ( o it's the last one
-    // TODO remove Empty state
-    // TODO move to separated Fragment
+    // We need to get our step flow back on sync with what is visible on screen, this will help
+    navController.addOnDestinationChangedListener { controller, destination, _ ->
+        destination.route?.let {  navigatedRoute ->
+            val navId = Step.NavId.valueOf(navigatedRoute)
+            viewModel.onDestinationChanged(navId)
+        }
+    }
 
     NavHost(
         navController = navController,
-        startDestination = Step.NavId.EMPTY.name,
+        startDestination = Step.NavId.OPTIONS.name,
         modifier = Modifier.padding(16.dp)
     ) {
-        composable(Step.NavId.EMPTY.name) {
+        composable(Step.NavId.START.name) {
             Text("Empty")
+        }
+        composable(Step.NavId.OPTIONS.name) {
+            val optionsFlow = viewModel.uiState.filterStep<Step.LoginOptionsStep>().map { it.data.options }
+            OptionsOverviewScreen(dataFlow = optionsFlow, onOptionSelected = viewModel::onOptionSelected)
         }
         composable(Step.NavId.EMAIL.name) {
             val enterEmailFlow = viewModel.uiState.filterStep<Step.EnterEmailStep>()
@@ -81,18 +85,6 @@ private fun LoginScreen(viewModel: LoginViewModel, navController: NavHostControl
         composable(Step.NavId.PASSWORD.name) {
             val enterPasswordFlow = viewModel.uiState.filterStep<Step.EnterPassword>()
             EnterPasswordScreen(dataFlow = enterPasswordFlow, onPasswordEntered = viewModel::onPasswordEntered)
-        }
-        composable(
-            route = "${Step.NavId.OPTIONS.name}/{options}",
-            arguments = listOf(
-                navArgument("options") {
-                    // Make argument type safe
-                    type = NavType.StringType
-                }
-            )
-        ) { entry ->
-            val options = entry.arguments?.getString("options")!!.split(",").toList()
-            OptionsOverviewScreen(options = options, onOptionSelected = viewModel::onOptionSelected)
         }
         composable(Step.NavId.END.name) {
            Text(
@@ -121,47 +113,57 @@ private inline fun <reified S>Flow<Outcome<Step>>.filterStep(): Flow<Outcome<S>>
 
 @Composable
 fun LoginStep(stepFlow: Flow<Step>, navController: NavHostController) {
-    Log.d("LoginStep", "Recomposed")
     val lifecycleOwner = LocalLifecycleOwner.current
     val stepFlowLifecycleAware = remember(stepFlow, lifecycleOwner) {
         stepFlow.flowWithLifecycle(lifecycleOwner.lifecycle, Lifecycle.State.STARTED)
     }
 
-    val stepState by stepFlowLifecycleAware.collectAsState(Step.Empty)
+    val stepState by stepFlowLifecycleAware.collectAsState(Step.Start)
 
     when (val step = stepState) {
-        is Step.ConfirmTermsStep -> TODO()
+        Step.Start -> { /* only here because we need an start destination */}
+        is Step.LoginOptionsStep -> navigateToOptions(navController)
         is Step.EnterEmailStep -> navigateToEmailStep(navController)
         is Step.EnterPassword -> navigateToPasswordSep(navController)
-        is Step.LoginOptionsStep -> navigateToOptions(navController, step.options)
-        is Step.VerifyMinAge -> TODO()
-        Step.Empty -> { }
         Step.End -> { navigateToEnd(navController) }
     }
 }
 
-private fun navigateToPasswordSep(navController: NavHostController) {
-    navController.navigate(Step.NavId.PASSWORD.name)
+private fun navigateToOptions(navController: NavHostController) {
+    navController.navigate(Step.NavId.OPTIONS.name) {
+        launchSingleTop = true
+        popUpTo(Step.NavId.START.name) {
+            inclusive = true
+        }
+    }
 }
 
 private fun navigateToEmailStep(navController: NavHostController) {
-    navController.navigate("${Step.NavId.EMAIL}", )
+    navController.navigate(Step.NavId.EMAIL.name) {
+        launchSingleTop = true
+    }
 }
 
-private fun navigateToOptions(navController: NavHostController, loginOptions: List<String>) {
-    val param = loginOptions.toTypedArray()
-    val stParam = param.joinToString(separator = ",")
-    navController.navigate("${Step.NavId.OPTIONS}/$stParam", )
+private fun navigateToPasswordSep(navController: NavHostController) {
+    navController.navigate(Step.NavId.PASSWORD.name) {
+        launchSingleTop =  true
+    }
 }
 
 private fun navigateToEnd(navController: NavHostController) {
-    navController.navigate("${Step.NavId.END.name}", )
+    navController.navigate(Step.NavId.END.name){
+        // Need to popup to Options, because Start is not in the back stack anymore (was poped up when navigation to Options)
+        popUpTo(Step.NavId.OPTIONS.name) {
+            inclusive = true
+        }
+        launchSingleTop = true
+    }
 }
 
-class MainViewModelFactory : ViewModelProvider.Factory {
-    override fun <T : ViewModel?> create(modelClass: Class<T>): T {
-        val strategy = BaseStrategy()
+class MainViewModelFactory(activity: MainActivity) : AbstractSavedStateViewModelFactory(activity, null) {
+
+    override fun <T : ViewModel?> create(key: String, modelClass: Class<T>, handle: SavedStateHandle): T {
         val repo = LoginRepository()
-        return LoginViewModel(strategy, repo) as T
+        return LoginViewModel(repo, handle) as T
     }
 }
