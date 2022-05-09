@@ -36,7 +36,6 @@ fun EnterEmailScreen(dataFlow: Flow<Outcome<Step.EnterEmailStep>>, onEmailEntere
 
 @Composable
 fun EnterEmailScreenContent(uiState: Outcome<Step.EnterEmailStep>, onEmailEntered: (email: String) -> Unit) {
-
     var text by rememberSaveable {
       mutableStateOf(uiState.data.enteredEmail.orEmpty())
     }
@@ -45,9 +44,7 @@ fun EnterEmailScreenContent(uiState: Outcome<Step.EnterEmailStep>, onEmailEntere
         Column {
             TextField(
                 value = text,
-                onValueChange = {
-                    text = it
-                },
+                onValueChange = { text = it },
                 label = { Text("Email:") }
             )
             when (val o = uiState){

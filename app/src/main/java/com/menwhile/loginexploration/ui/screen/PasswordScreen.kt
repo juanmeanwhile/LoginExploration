@@ -37,15 +37,11 @@ fun EnterPasswordScreen(dataFlow: Flow<Outcome<Step.EnterPassword>>, onPasswordE
 @Composable
 fun EnterPasswordScreenContent(uiState: Outcome<Step.EnterPassword>, onPasswordEntered: (email: String) -> Unit) {
     LoginScreen(title = "Enter Password") {
-
-        Column() {
+        Column {
             var text by rememberSaveable { mutableStateOf("") }
-
             TextField(
                 value = text,
-                onValueChange = {
-                    text = it
-                },
+                onValueChange = { text = it },
                 label = { Text("Password") }
             )
 

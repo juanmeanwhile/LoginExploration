@@ -33,12 +33,12 @@ class LoginViewModel(
     /**
      * Holds the current status of a login action
      */
-    private val _actionState: MutableStateFlow<Outcome<Unit>> = MutableStateFlow(Outcome.Success(Unit))
+    private val mutableActionState: MutableStateFlow<Outcome<Unit>> = MutableStateFlow(Outcome.Success(Unit))
 
     /**
      * Holds the data filled by the user, which can be used by the strategy to decide what is the next step.
      */
-    private val _filledData = MutableSharedFlow<FilledData>(
+    private val mutableFilledData = MutableSharedFlow<FilledData>(
         replay = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
@@ -46,7 +46,7 @@ class LoginViewModel(
     /**
      * Holds the step the user is currently in. Emitting new step means that we need to navigate to that Step screen
      */
-    private val _currentStep = MutableSharedFlow<Step>(
+    private val mutableCurrentStep = MutableSharedFlow<Step>(
     replay = 1,
     onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
@@ -54,14 +54,14 @@ class LoginViewModel(
     /**
      * One single flow expose ui state, represented by [Outcome] (success, loading, error) and the [Step] that should be displayed in the UI
      */
-    val uiState: Flow<Outcome<Step>> = combine(_actionState, _currentStep) { actionStatus: Outcome<Unit>, step: Step ->
+    val uiState: Flow<Outcome<Step>> = combine(mutableActionState, mutableCurrentStep) { actionStatus: Outcome<Unit>, step: Step ->
         // Use Outcome from action flow but with the data from step flow. I prefer to expose one single flow to the UI
         actionStatus.map { step }
     }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(), replay = 1)
 
     /**
      * Help field to get the current Data internally. Since we are using SharedFlow, we cannot access its value directly, so we have this helper method.
-     * Another option could be to just to use first() from [_filledData].
+     * Another option could be to just to use first() from [mutableFilledData].
      */
     private val currentFilledData: FilledData
         get() = savedInstanceData ?: FilledData(null, null, null, false, null)
@@ -76,15 +76,16 @@ class LoginViewModel(
 
     init {
         // Start the emission, this will get data from saved State if there are any, so recreation is handled
-        _filledData.tryEmit(currentFilledData)
+        mutableFilledData.tryEmit(currentFilledData)
 
         viewModelScope.launch {
-            _filledData.collectLatest { data ->
+            mutableFilledData.collectLatest { data ->
                 // Store in saved instance to survive recreation
                 savedInstanceData = data
 
                 // Decide which step needs to be triggered
-                onDataProvided(data)
+                val nextStep = onDataProvided(data)
+                mutableCurrentStep.emit(nextStep)
             }
         }
     }
@@ -94,11 +95,11 @@ class LoginViewModel(
      */
     fun onDestinationChanged(navId: Step.NavId) {
         viewModelScope.launch {
-            val currentStep = _currentStep.first()
+            val currentStep = mutableCurrentStep.first()
             // When the user navigates back, our step in uiState flow won't match with the step visible to the user. Thi match is needed in order for the
             // screen being able to get the screen data (due to the filter being done).
             if (currentStep.id != navId) {
-                _currentStep.tryEmit(generateStep(navId = navId, currentFilledData))
+                mutableCurrentStep.tryEmit(generateStep(navId = navId, currentFilledData))
             }
         }
     }
@@ -110,7 +111,7 @@ class LoginViewModel(
         // We assume option was Email just for simplicity
         viewModelScope.launch {
             val updatedData = currentFilledData.copy(flowType = FlowType.EMAIL_PASS)
-            _filledData.emit(updatedData)
+            mutableFilledData.emit(updatedData)
         }
     }
 
@@ -123,10 +124,10 @@ class LoginViewModel(
             // Do validation (business logic)
             if (email.contains('@')){
                 val updatedData = currentFilledData.copy(userEmail = email)
-                _filledData.emit(updatedData)
-                _actionState.emit(Outcome.Success(Unit))
+                mutableFilledData.emit(updatedData)
+                mutableActionState.emit(Outcome.Success(Unit))
             } else {
-                _actionState.emit(Outcome.Error(ex = InvalidEmailException(), data = Unit))
+                mutableActionState.emit(Outcome.Error(ex = InvalidEmailException(), data = Unit))
             }
         }
     }
@@ -138,16 +139,16 @@ class LoginViewModel(
     fun onPasswordEntered(password: String) {
         viewModelScope.launch {
             with (currentFilledData) {
-                _actionState.emit(Outcome.Loading(Unit))
+                mutableActionState.emit(Outcome.Loading(Unit))
                 kotlin.runCatching {
                     // JUAN is not great to reach this place and having to !! in some fields
                     // We crash because we shouldn't reach this place and we prefer to crash the app and realise in development
                     val userId = loginRepo.login(userEmail!!, password)
 
-                    _actionState.emit(Outcome.Success(Unit))
-                    _filledData.emit(currentFilledData.copy(userPassword = password, userId = userId))
+                    mutableActionState.emit(Outcome.Success(Unit))
+                    mutableFilledData.emit(currentFilledData.copy(userPassword = password, userId = userId))
                 }.onFailure {
-                    _actionState.emit(Outcome.Error(ex = it, data = Unit))
+                    mutableActionState.emit(Outcome.Error(ex = it, data = Unit))
                 }
             }
         }
@@ -157,22 +158,18 @@ class LoginViewModel(
      * For now we'll use this method to wrap our logic on which Step need to be shown depending on which data the user has already provided.
      * In future iterations we'll explore a better place to put this logic, but for now I want to keep it simple
      */
-    private fun onDataProvided(data: FilledData) {
+    private fun onDataProvided(data: FilledData) : Step {
         val nextNavId =  when {
             data.flowType == null -> Step.NavId.OPTIONS
             data.userEmail == null -> Step.NavId.EMAIL
-            data.userPassword == null -> Step.NavId.PASSWORD
+            data.userPassword == null ||
+            data.userId == null -> Step.NavId.PASSWORD
             else -> {
-                if (data.userId != null) {
-                    Step.NavId.END
-                } else {
-                    Step.NavId.PASSWORD
-                }
+                Step.NavId.END
             }
         }
 
-        val nextStep = generateStep(nextNavId, data)
-        _currentStep.tryEmit(nextStep)
+        return generateStep(nextNavId, data)
     }
 
     private fun generateStep(navId: Step.NavId, filledData: FilledData): Step {

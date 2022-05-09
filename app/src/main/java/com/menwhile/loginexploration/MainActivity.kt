@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 // A surface container using the 'background' color from the theme
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background) {
-                    LoginScreen(viewModel, navController) //TODO get viewModel
+                    LoginScreen(viewModel, navController)
                 }
             }
         }
